@@ -1,0 +1,12 @@
+---
+title: "chess-ELO-ratings"
+author: "Jess Chen"
+format: gfm
+editor: visual
+---
+
+Approach
+
+1.  Upload chess file into R markup file (either create my own or ask a classmate for their cleaned up file from project 1).
+2.  Manually calculate a few players expected scores and diff from actual score.
+3.  Create code to calculate scores for all players and rank top 5 and bottom 5.
