@@ -5,8 +5,115 @@ format: gfm
 editor: visual
 ---
 
-Approach
+## Intro
 
-1.  Upload chess file into R markup file (either create my own or ask a classmate for their cleaned up file from project 1).
-2.  Manually calculate a few players expected scores and diff from actual score.
-3.  Create code to calculate scores for all players and rank top 5 and bottom 5.
+This project takes an interesting dive into the calculations involved in player rankings in chess. It is eye opening to see how the formula takes the opponents ranking and expected result into consideration when calculating the new ranking. While I don't follow chess, it was interesting to learn that this system was adopted by the NFL but I was disappointed it is not adopted for tennis as that seems like a perfect fit.
+
+## Data Upload and Cleanup
+
+```{r}
+
+library(tidyverse)
+library(dplyr)
+library(gt)
+
+chess_data <- read.csv("https://raw.githubusercontent.com/JessChen0/Chess-ELO-ratings/refs/heads/main/Chess-Scores-Cleaned%20-%20Sheet1.csv")
+
+head(chess_data)
+```
+
+It appears that there are players who has an extra three digits in their rating which will cause issues with the rating calculations. (Fun Fact: Based on a LLM answer, I learned that these are provisional rankings where a player is relatively new and the number after the P indicates how many games the player has played. The ratings will become final after the player has completed 26 official games.) In order to use the ratings formula to calculate Ex (expected score), we will first need to separate these into separate columns.
+
+```{r}
+
+#move provisional scores to new columns
+chess_data_cleaned <- chess_data %>%
+  mutate(
+    Rank.Pre.Provisional = ifelse(grepl("P\\d+", Rank.Pre), sub(".*?(P\\d+)$", "\\1", Rank.Pre), NA),
+    Rank.Pre  = as.numeric(sub("P\\d+", "", Rank.Pre)),
+    Rank.Post.Provisional = ifelse(grepl("P\\d+", Rank.Post), sub(".*?(P\\d+)$", "\\1", Rank.Post), NA),
+    Rank.Post  = as.numeric(sub("P\\d+", "", Rank.Post)),
+    )
+
+head(chess_data_cleaned)
+```
+
+## Analysis
+
+We will use the formula provided by *singingbanana* in the video [The Elo Rating System for Chess and Beyond](https://www.youtube.com/watch?v=AsYfbmp0To0) to calculate the expected score (Ex) of each player.
+
+| Rpost = Rpre + 32(Actual Score - Expected Score)
+| where R is Rating
+
+I calculated out a few player's expected scores by hand to ensure the logic conceptually makes sense and to visualize the reorganized formula:
+
+| Actual Score - Difference = Expected Score
+| where Difference = (Rpost - Rpre)/32
+
+```{r}
+
+# calculating difference and expected scores
+chess_data_cleaned %>% 
+  mutate (
+    Score_Difference = (Rank.Post - Rank.Pre)/32,
+    Expected_Score = Actual.Score - Score_Difference
+  ) %>%
+  select(Player, Name, Rank.Pre, Rank.Post,Score_Difference, Expected_Score) %>%
+  arrange(desc(Score_Difference)) %>%
+  slice_head(n=5) %>%
+  gt() %>%
+  tab_header (
+    title = "Players with highest score differencials (Top 5)"
+  )
+
+
+chess_data_cleaned %>% 
+  mutate (
+    Score_Difference = (Rank.Post - Rank.Pre)/32,
+    Expected_Score = Actual.Score - Score_Difference
+  ) %>%
+  select(Player, Name, Rank.Pre, Rank.Post,Score_Difference, Expected_Score) %>%
+  arrange(Score_Difference) %>%
+  slice_head(n=5) %>%
+  gt() %>%
+  tab_header (
+    title = "Players with lowest score differentials (Lowest 5)"
+  )
+
+
+```
+
+## Discussion
+
+A "logic" check on the top "score difference" results suggest something is off with the formula or data. For example, Aditya Bajaj has a pre and post rank score difference of 258 points, if we use a standard K factor of 32, this score is higher than the maximum a player can get after 7 games (32x7 = 224). Its possible another K factor was used or there was a typo in the original document. For reference, I would have to make the K factor close to 64 to have the data make sense for Ethan Guo who is not a provisional player.
+
+```{r}
+
+# calculating difference and expected scores
+chess_data_cleaned %>% 
+  mutate (
+    Score_Difference = (Rank.Post - Rank.Pre)/64,
+    Expected_Score = Actual.Score - Score_Difference
+  ) %>%
+  select(Player, Name, Rank.Pre, Rank.Post,Score_Difference, Expected_Score) %>%
+  arrange(desc(Score_Difference)) %>%
+  slice_head(n=5) %>%
+  gt() %>%
+  tab_header (
+    title = "Players with highest score differencials (Top 5)"
+  )
+
+
+```
+
+In querying with LLM, it was suggested that any provisional scoring may be subject to another K factor. This rationale could be used for Jacob Alexander and Zackary James however, the discrepancies with the above players cannot be explained.
+
+## Conclusion
+
+While the analysis flowed smoothly, I ran into difficulty when interpreting results at the end as I came across some outliers. I believe some of this could be explained by provisional players rankings as I learned these players may be scored slightly differently. That said, there were a few inconsistencies around really high or low score differences that require further confirmation of "k factors" and possibly double checking source data.
+
+## References
+
+Singingbanana, The ELO Rating System for Chess and Beyond, <https://www.youtube.com/watch?v=AsYfbmp0To0> (Youtube)
+
+Claude LLM (2026). Anthropic LLM. Link to chat: <https://claude.ai/share/bcce309d-299d-4daf-aea2-fbc66c9c8c70>
